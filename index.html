@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reigate → Athens</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; }
+
+  /* ── Header ── */
+  header {
+    background: linear-gradient(135deg, #1a1f2e, #252b3d);
+    padding: 12px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid #2d3450;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 1.2rem; font-weight: 700; color: #fff; letter-spacing: 0.5px; }
+  header h1 span { color: #4fc3f7; }
+  #refreshBtn {
+    background: #2d3450; border: 1px solid #4fc3f7; color: #4fc3f7;
+    padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.8rem;
+    transition: all 0.2s;
+  }
+  #refreshBtn:hover { background: #4fc3f7; color: #0f1117; }
+
+  /* ── Progress bar ── */
+  #progressBar {
+    background: #1a1f2e; padding: 10px 20px; flex-shrink: 0;
+    border-bottom: 1px solid #2d3450;
+  }
+  .bar-track {
+    background: #2d3450; border-radius: 99px; height: 8px; width: 100%; overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%; border-radius: 99px;
+    background: linear-gradient(90deg, #43a047, #81c784);
+    transition: width 0.8s ease;
+  }
+  #progressLabel {
+    display: flex; justify-content: space-between;
+    font-size: 0.75rem; color: #9e9e9e; margin-top: 4px;
+  }
+  #progressLabel span { color: #e0e0e0; font-weight: 600; }
+
+  /* ── Stats row ── */
+  #stats {
+    background: #1a1f2e;
+    display: flex; gap: 1px; flex-shrink: 0;
+    border-bottom: 1px solid #2d3450;
+  }
+  .stat {
+    flex: 1; padding: 8px 12px; text-align: center;
+    background: #1a1f2e;
+  }
+  .stat-val { font-size: 1.1rem; font-weight: 700; color: #4fc3f7; }
+  .stat-lbl { font-size: 0.65rem; color: #9e9e9e; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* ── Main layout ── */
+  #main { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── Sidebar ── */
+  #sidebar {
+    width: 280px; flex-shrink: 0;
+    background: #1a1f2e; overflow-y: auto;
+    border-right: 1px solid #2d3450;
+  }
+  #sidebar h2 {
+    padding: 10px 14px; font-size: 0.8rem; text-transform: uppercase;
+    letter-spacing: 1px; color: #9e9e9e; border-bottom: 1px solid #2d3450;
+    position: sticky; top: 0; background: #1a1f2e; z-index: 10;
+  }
+  .stage-item {
+    padding: 8px 14px; border-bottom: 1px solid #252b3d;
+    cursor: pointer; transition: background 0.15s;
+    display: flex; align-items: flex-start; gap: 8px;
+  }
+  .stage-item:hover { background: #252b3d; }
+  .stage-item.active { background: #1e2d4a; border-left: 3px solid #4fc3f7; }
+  .stage-num {
+    font-size: 0.65rem; font-weight: 700; color: #9e9e9e;
+    min-width: 22px; padding-top: 2px;
+  }
+  .stage-info { flex: 1; }
+  .stage-route { font-size: 0.8rem; font-weight: 600; color: #e0e0e0; }
+  .stage-sub { font-size: 0.7rem; color: #9e9e9e; margin-top: 1px; }
+  .stage-dot {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 4px;
+  }
+  .dot-done { background: #43a047; }
+  .dot-plan { background: #1e88e5; }
+  .dot-rest { background: #fb8c00; }
+  .dot-poi  { background: #ab47bc; }
+
+  /* ── Map ── */
+  #map { flex: 1; }
+
+  /* ── Loading overlay ── */
+  #loader {
+    position: fixed; inset: 0; background: rgba(15,17,23,0.9);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 9999; flex-direction: column; gap: 12px;
+  }
+  .spinner {
+    width: 36px; height: 36px; border: 3px solid #2d3450;
+    border-top-color: #4fc3f7; border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loader p { color: #9e9e9e; font-size: 0.85rem; }
+
+  /* ── Leaflet popup override ── */
+  .leaflet-popup-content-wrapper {
+    background: #1a1f2e; color: #e0e0e0; border: 1px solid #2d3450;
+    border-radius: 8px;
+  }
+  .leaflet-popup-tip { background: #1a1f2e; }
+  .popup-title { font-weight: 700; font-size: 0.9rem; color: #4fc3f7; margin-bottom: 4px; }
+  .popup-meta { font-size: 0.75rem; color: #9e9e9e; margin-bottom: 4px; }
+  .popup-notes { font-size: 0.78rem; color: #ccc; margin-top: 6px; border-top: 1px solid #2d3450; padding-top: 6px; }
+  .tag {
+    display: inline-block; font-size: 0.65rem; padding: 1px 6px;
+    border-radius: 99px; margin-right: 4px; font-weight: 600; text-transform: uppercase;
+  }
+  .tag-done { background: #1b5e20; color: #81c784; }
+  .tag-plan { background: #0d47a1; color: #90caf9; }
+  .tag-rest { background: #e65100; color: #ffcc80; }
+  .tag-poi  { background: #4a148c; color: #ce93d8; }
+
+  @media (max-width: 640px) {
+    #sidebar { display: none; }
+    .stat-lbl { font-size: 0.6rem; }
+  }
+</style>
+</head>
+<body>
+
+<div id="loader">
+  <div class="spinner"></div>
+  <p>Loading route data…</p>
+</div>
+
+<header>
+  <h1>🚴 Reigate <span>→</span> Athens</h1>
+  <button id="refreshBtn" onclick="loadData()">↻ Refresh</button>
+</header>
+
+<div id="progressBar">
+  <div class="bar-track"><div class="bar-fill" id="barFill" style="width:0%"></div></div>
+  <div id="progressLabel">
+    <span id="pctLabel">0% complete</span>
+    <span id="kmLabel">0 / 0 km</span>
+  </div>
+</div>
+
+<div id="stats">
+  <div class="stat"><div class="stat-val" id="sDone">—</div><div class="stat-lbl">Stages done</div></div>
+  <div class="stat"><div class="stat-val" id="sRemain">—</div><div class="stat-lbl">Stages left</div></div>
+  <div class="stat"><div class="stat-val" id="sKmDone">—</div><div class="stat-lbl">km ridden</div></div>
+  <div class="stat"><div class="stat-val" id="sKmLeft">—</div><div class="stat-lbl">km to go</div></div>
+</div>
+
+<div id="main">
+  <div id="sidebar">
+    <h2>Stage List</h2>
+    <div id="stageList"></div>
+  </div>
+  <div id="map"></div>
+</div>
+
+<script>
+// ── Config ─────────────────────────────────────────────────
+// IMPORTANT: Replace with your deployed Apps Script web app URL
+var SCRIPT_URL = 'YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
+
+// ── Map setup ───────────────────────────────────────────────
+var map = L.map('map', { zoomControl: true }).setView([48, 10], 4);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© OpenStreetMap contributors © CARTO',
+  maxZoom: 18
+}).addTo(map);
+
+var markersLayer = L.layerGroup().addTo(map);
+var polylineDone = null;
+var polylinePlan = null;
+
+// ── State ───────────────────────────────────────────────────
+var allStages = [];
+var activeIdx = -1;
+
+// ── Load data from Apps Script ──────────────────────────────
+function loadData() {
+  document.getElementById('loader').style.display = 'flex';
+  var url = SCRIPT_URL + (SCRIPT_URL.includes('?') ? '&' : '?') + 'action=getData&cb=' + Date.now();
+
+  fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      allStages = data.stages || [];
+      renderStats(data);
+      renderSidebar(allStages);
+      renderMap(allStages);
+      document.getElementById('loader').style.display = 'none';
+    })
+    .catch(function(err) {
+      console.error('Failed to load data:', err);
+      document.getElementById('loader').style.display = 'none';
+      alert('Could not load route data. Check your SCRIPT_URL is set correctly.');
+    });
+}
+
+// ── Render stats panel ───────────────────────────────────────
+function renderStats(data) {
+  document.getElementById('barFill').style.width = (data.pctComplete || 0) + '%';
+  document.getElementById('pctLabel').textContent = (data.pctComplete || 0) + '% complete';
+  document.getElementById('kmLabel').textContent  = (data.completedKm || 0).toLocaleString() + ' / ' + (data.totalKm || 0).toLocaleString() + ' km';
+  document.getElementById('sDone').textContent    = data.stagesDone || 0;
+  document.getElementById('sRemain').textContent  = (data.stagesTotal || 0) - (data.stagesDone || 0);
+  document.getElementById('sKmDone').textContent  = (data.completedKm || 0).toLocaleString();
+  document.getElementById('sKmLeft').textContent  = (data.remainingKm || 0).toLocaleString();
+}
+
+// ── Render sidebar stage list ────────────────────────────────
+function renderSidebar(stages) {
+  var list = document.getElementById('stageList');
+  list.innerHTML = '';
+  stages.forEach(function(s, i) {
+    var div = document.createElement('div');
+    div.className = 'stage-item';
+    div.id = 'si-' + i;
+
+    var dotClass = s.completed ? 'dot-done'
+                 : s.type === 'rest' ? 'dot-rest'
+                 : s.type === 'poi'  ? 'dot-poi'
+                 : 'dot-plan';
+
+    div.innerHTML =
+      '<div class="stage-dot ' + dotClass + '"></div>' +
+      '<div class="stage-num">' + s.stage + '</div>' +
+      '<div class="stage-info">' +
+        '<div class="stage-route">' + esc(s.from) + ' → ' + esc(s.to) + '</div>' +
+        '<div class="stage-sub">' + (s.date || '—') + (s.distKm ? ' · ' + s.distKm + ' km' : '') + '</div>' +
+      '</div>';
+
+    div.onclick = (function(idx) {
+      return function() { focusStage(idx); };
+    })(i);
+
+    list.appendChild(div);
+  });
+}
+
+// ── Render map markers + polylines ──────────────────────────
+function renderMap(stages) {
+  markersLayer.clearLayers();
+  if (polylineDone) map.removeLayer(polylineDone);
+  if (polylinePlan) map.removeLayer(polylinePlan);
+
+  var doneCoords = [];
+  var planCoords = [];
+  var lastDone   = -1;
+  var bounds     = [];
+
+  stages.forEach(function(s, i) {
+    if (!s.lat || !s.lng) return;
+    var ll = [s.lat, s.lng];
+    bounds.push(ll);
+
+    // polyline coordinates
+    if (s.completed) {
+      doneCoords.push(ll);
+      lastDone = i;
+    } else {
+      planCoords.push(ll);
+    }
+
+    // Stitch: if previous was done and this is not, bridge the gap
+    if (!s.completed && i > 0 && stages[i-1] && stages[i-1].completed && stages[i-1].lat) {
+      planCoords.unshift([stages[i-1].lat, stages[i-1].lng]);
+    }
+
+    // Marker
+    var colour  = s.completed ? '#43a047' : s.type === 'rest' ? '#fb8c00' : s.type === 'poi' ? '#ab47bc' : '#1e88e5';
+    var radius  = (i === 0 || i === stages.length - 1) ? 9 : s.type === 'rest' ? 7 : 5;
+    var marker  = L.circleMarker(ll, {
+      radius: radius, color: colour, fillColor: colour,
+      fillOpacity: 0.85, weight: 2
+    });
+
+    var tagCls  = s.completed ? 'tag-done' : s.type === 'rest' ? 'tag-rest' : s.type === 'poi' ? 'tag-poi' : 'tag-plan';
+    var tagTxt  = s.completed ? 'Done' : s.type === 'rest' ? 'Rest' : s.type === 'poi' ? 'POI' : 'Planned';
+
+    marker.bindPopup(
+      '<div class="popup-title">Stage ' + s.stage + ': ' + esc(s.from) + ' → ' + esc(s.to) + '</div>' +
+      '<div class="popup-meta">' +
+        '<span class="tag ' + tagCls + '">' + tagTxt + '</span>' +
+        (s.date ? s.date + ' · ' : '') + (s.distKm ? s.distKm + ' km' : '') +
+      '</div>' +
+      (s.notes ? '<div class="popup-notes">' + esc(s.notes) + '</div>' : ''),
+      { maxWidth: 260 }
+    );
+
+    marker.on('click', (function(idx) {
+      return function() { highlightSidebarItem(idx); };
+    })(i));
+
+    markersLayer.addLayer(marker);
+  });
+
+  // Draw polylines
+  if (doneCoords.length > 1) {
+    polylineDone = L.polyline(doneCoords, { color: '#43a047', weight: 4, opacity: 0.85 }).addTo(map);
+  }
+  if (planCoords.length > 1) {
+    polylinePlan = L.polyline(planCoords, { color: '#1e88e5', weight: 3, opacity: 0.55, dashArray: '6,6' }).addTo(map);
+  }
+
+  if (bounds.length > 1) map.fitBounds(bounds, { padding: [30, 30] });
+}
+
+// ── Focus on a stage ─────────────────────────────────────────
+function focusStage(idx) {
+  var s = allStages[idx];
+  if (!s || !s.lat || !s.lng) return;
+  highlightSidebarItem(idx);
+  map.setView([s.lat, s.lng], 9, { animate: true });
+  // Find and open the popup for this stage
+  markersLayer.eachLayer(function(layer) {
+    if (layer.getLatLng &&
+        Math.abs(layer.getLatLng().lat - s.lat) < 0.001 &&
+        Math.abs(layer.getLatLng().lng - s.lng) < 0.001) {
+      layer.openPopup();
+    }
+  });
+}
+
+function highlightSidebarItem(idx) {
+  if (activeIdx >= 0) {
+    var prev = document.getElementById('si-' + activeIdx);
+    if (prev) prev.classList.remove('active');
+  }
+  activeIdx = idx;
+  var el = document.getElementById('si-' + idx);
+  if (el) {
+    el.classList.add('active');
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Boot ─────────────────────────────────────────────────────
+loadData();
+</script>
+</body>
+</html>
